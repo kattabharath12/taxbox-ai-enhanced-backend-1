@@ -24,6 +24,7 @@ from services.w2_extractor import W2Extractor
 
 # Create tables
 Base.metadata.create_all(bind=engine)
+print("Tables created (if not exist)")
 
 app = FastAPI(title="TaxBox.AI API", version="2.0.0")
 
