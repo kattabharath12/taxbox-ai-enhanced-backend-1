@@ -27,7 +27,7 @@ from services.w2_extractor import W2Extractor
 print("Initializing database...")
 
 def init_database():
-    """Initialize database with proper error handling"""
+    """Initialize database with explicit table creation"""
     try:
         # Test basic connectivity
         print("Testing database connection...")
@@ -37,44 +37,56 @@ def init_database():
         
         # Drop and recreate all tables to ensure clean state
         print("Dropping existing tables (if any)...")
-        Base.metadata.drop_all(bind=engine)
+        try:
+            Base.metadata.drop_all(bind=engine)
+            print("✅ Tables dropped successfully")
+        except Exception as e:
+            print(f"⚠️ Drop tables warning (may be normal): {e}")
         
         print("Creating fresh database tables...")
-        Base.metadata.create_all(bind=engine)
         
-        # Verify tables exist by attempting to query them
+        # Create tables with explicit transaction control
+        with engine.begin() as conn:
+            Base.metadata.create_all(bind=conn)
+            print("✅ Tables created in transaction")
+        
+        # Verify tables exist with fresh connections
         print("Verifying table creation...")
-        with SessionLocal() as db:
-            # Test each table individually
+        
+        # Test each table individually with fresh sessions
+        table_names = ['users', 'documents', 'tax_returns', 'payments', 'w2_forms']
+        
+        for table_name in table_names:
             try:
-                db.execute(text("SELECT COUNT(*) FROM users"))
-                print("✅ users table verified")
+                with engine.connect() as conn:
+                    result = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
+                    count = result.scalar()
+                    print(f"✅ {table_name} table verified (count: {count})")
             except Exception as e:
-                print(f"❌ users table issue: {e}")
-                
-            try:
-                db.execute(text("SELECT COUNT(*) FROM documents"))
-                print("✅ documents table verified")
-            except Exception as e:
-                print(f"❌ documents table issue: {e}")
-                
-            try:
-                db.execute(text("SELECT COUNT(*) FROM tax_returns"))
-                print("✅ tax_returns table verified")
-            except Exception as e:
-                print(f"❌ tax_returns table issue: {e}")
-                
-            try:
-                db.execute(text("SELECT COUNT(*) FROM payments"))
-                print("✅ payments table verified")
-            except Exception as e:
-                print(f"❌ payments table issue: {e}")
-                
-            try:
-                db.execute(text("SELECT COUNT(*) FROM w2_forms"))
-                print("✅ w2_forms table verified")
-            except Exception as e:
-                print(f"❌ w2_forms table issue: {e}")
+                print(f"❌ {table_name} table issue: {e}")
+                # Try to create individual table
+                try:
+                    print(f"Attempting to create {table_name} table individually...")
+                    if table_name == 'users':
+                        User.__table__.create(engine, checkfirst=True)
+                    elif table_name == 'documents':
+                        Document.__table__.create(engine, checkfirst=True)
+                    elif table_name == 'tax_returns':
+                        TaxReturn.__table__.create(engine, checkfirst=True)
+                    elif table_name == 'payments':
+                        Payment.__table__.create(engine, checkfirst=True)
+                    elif table_name == 'w2_forms':
+                        W2Form.__table__.create(engine, checkfirst=True)
+                    print(f"✅ {table_name} table created individually")
+                except Exception as create_error:
+                    print(f"❌ Failed to create {table_name}: {create_error}")
+        
+        # Final verification
+        print("Final verification...")
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"))
+            actual_tables = [row[0] for row in result.fetchall()]
+            print(f"✅ Actually created tables: {actual_tables}")
         
         print("✅ Database initialization completed successfully")
         return True
@@ -84,7 +96,6 @@ def init_database():
         import traceback
         traceback.print_exc()
         return False
-
 # Initialize the database
 db_success = init_database()
 if not db_success:
