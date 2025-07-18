@@ -23,26 +23,72 @@ from schemas import (
 )
 from services.w2_extractor import W2Extractor
 
-# REMOVE the old table creation line and replace with proper initialization
+# DEFINITIVE database initialization
 print("Initializing database...")
 
-# Create tables with proper error handling
-try:
-    # Ensure all models are imported before creating tables
-    print("Creating database tables...")
-    Base.metadata.create_all(bind=engine)
-    print("✅ Database tables created successfully")
-    
-    # Test the connection
-    with SessionLocal() as test_db:
-        test_db.execute(text("SELECT 1"))
-        print("✅ Database connection test successful")
+def init_database():
+    """Initialize database with proper error handling"""
+    try:
+        # Test basic connectivity
+        print("Testing database connection...")
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+            print("✅ Database connection established")
         
-except Exception as e:
-    print(f"❌ Database initialization error: {e}")
-    import traceback
-    traceback.print_exc()
+        # Drop and recreate all tables to ensure clean state
+        print("Dropping existing tables (if any)...")
+        Base.metadata.drop_all(bind=engine)
+        
+        print("Creating fresh database tables...")
+        Base.metadata.create_all(bind=engine)
+        
+        # Verify tables exist by attempting to query them
+        print("Verifying table creation...")
+        with SessionLocal() as db:
+            # Test each table individually
+            try:
+                db.execute(text("SELECT COUNT(*) FROM users"))
+                print("✅ users table verified")
+            except Exception as e:
+                print(f"❌ users table issue: {e}")
+                
+            try:
+                db.execute(text("SELECT COUNT(*) FROM documents"))
+                print("✅ documents table verified")
+            except Exception as e:
+                print(f"❌ documents table issue: {e}")
+                
+            try:
+                db.execute(text("SELECT COUNT(*) FROM tax_returns"))
+                print("✅ tax_returns table verified")
+            except Exception as e:
+                print(f"❌ tax_returns table issue: {e}")
+                
+            try:
+                db.execute(text("SELECT COUNT(*) FROM payments"))
+                print("✅ payments table verified")
+            except Exception as e:
+                print(f"❌ payments table issue: {e}")
+                
+            try:
+                db.execute(text("SELECT COUNT(*) FROM w2_forms"))
+                print("✅ w2_forms table verified")
+            except Exception as e:
+                print(f"❌ w2_forms table issue: {e}")
+        
+        print("✅ Database initialization completed successfully")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Database initialization failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
+# Initialize the database
+db_success = init_database()
+if not db_success:
+    print("⚠️ Starting app with database issues - some features may not work")
 app = FastAPI(title="TaxBox.AI API", version="2.0.0")
 
 # SIMPLIFIED startup event - just for logging, since we already created tables
@@ -384,6 +430,36 @@ def create_payment(
 @app.get("/health")
 def health_check():
     return {"status": "healthy", "timestamp": datetime.utcnow()}
+
+@app.get("/health/db")
+def database_health_check():
+    """Check database connectivity and table existence"""
+    try:
+        with SessionLocal() as db:
+            # Test connection
+            db.execute(text("SELECT 1"))
+            
+            # Check each table
+            tables_status = {}
+            for table_name in ['users', 'documents', 'tax_returns', 'payments', 'w2_forms']:
+                try:
+                    result = db.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
+                    count = result.scalar()
+                    tables_status[table_name] = {"exists": True, "count": count}
+                except Exception as e:
+                    tables_status[table_name] = {"exists": False, "error": str(e)}
+            
+            return {
+                "database_status": "healthy",
+                "tables": tables_status,
+                "timestamp": datetime.utcnow()
+            }
+    except Exception as e:
+        return {
+            "database_status": "unhealthy",
+            "error": str(e),
+            "timestamp": datetime.utcnow()
+        }
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
