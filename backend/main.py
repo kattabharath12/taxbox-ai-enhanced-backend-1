@@ -27,7 +27,35 @@ Base.metadata.create_all(bind=engine)
 print("Tables created (if not exist)")
 
 app = FastAPI(title="TaxBox.AI API", version="2.0.0")
+@app.on_event("startup")
+async def startup_event():
+    """Create database tables on startup"""
+    try:
+        # Import all models first
+        from models import User, Document, TaxReturn, Payment, W2Form
+        
+        # Create tables
+        Base.metadata.create_all(bind=engine)
+        print("✅ Database tables created on startup")
+        
+        # Test connection
+        with SessionLocal() as db:
+            db.execute("SELECT 1")
+        print("✅ Database connection verified")
+        
+    except Exception as e:
+        print(f"❌ Database error: {e}")
+        import traceback
+        traceback.print_exc()
 
+@app.get("/")
+def root():
+    return {
+        "message": "TaxBox.AI API is running!", 
+        "version": "2.0.0",
+        "docs": "/docs",
+        "health": "/health"
+    }
 # CORS middleware - FIXED VERSION
 app.add_middleware(
     CORSMiddleware,
