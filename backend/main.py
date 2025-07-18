@@ -3,6 +3,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from datetime import datetime, timedelta
 from typing import Optional, List
 import jwt
@@ -14,7 +15,7 @@ import aiofiles
 from pathlib import Path
 
 from database import SessionLocal, engine, Base
-from models import User, Document, TaxReturn, Payment, W2Form
+from models import User, Document, TaxReturn, Payment, W2Form  # Import models FIRST
 from schemas import (
     UserCreate, UserResponse, DocumentResponse, TaxReturnCreate, 
     TaxReturnResponse, PaymentCreate, PaymentResponse, W2FormResponse,
@@ -22,32 +23,45 @@ from schemas import (
 )
 from services.w2_extractor import W2Extractor
 
-# Create tables
-Base.metadata.create_all(bind=engine)
-print("Tables created (if not exist)")
+# REMOVE the old table creation line and replace with proper initialization
+print("Initializing database...")
+
+# Create tables with proper error handling
+try:
+    # Ensure all models are imported before creating tables
+    print("Creating database tables...")
+    Base.metadata.create_all(bind=engine)
+    print("✅ Database tables created successfully")
+    
+    # Test the connection
+    with SessionLocal() as test_db:
+        test_db.execute(text("SELECT 1"))
+        print("✅ Database connection test successful")
+        
+except Exception as e:
+    print(f"❌ Database initialization error: {e}")
+    import traceback
+    traceback.print_exc()
 
 app = FastAPI(title="TaxBox.AI API", version="2.0.0")
+
+# SIMPLIFIED startup event - just for logging, since we already created tables
 @app.on_event("startup")
 async def startup_event():
-    """Create database tables on startup"""
+    """Log startup information"""
     try:
-        # Import all models first
-        from models import User, Document, TaxReturn, Payment, W2Form
-        from sqlalchemy import text  # Add this import
+        db_url = os.getenv("DATABASE_URL", "sqlite:///./taxbox.db")
+        db_type = "PostgreSQL" if "postgresql" in db_url else "SQLite"
+        print(f"🚀 TaxBox.AI API started successfully using {db_type}")
         
-        # Create tables
-        Base.metadata.create_all(bind=engine)
-        print("✅ Database tables created on startup")
-        
-        # Test connection with proper SQLAlchemy syntax
+        # Verify tables exist
         with SessionLocal() as db:
-            db.execute(text("SELECT 1"))  # Fixed: Use text() wrapper
-        print("✅ Database connection verified")
-        
+            result = db.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"))
+            tables = [row[0] for row in result.fetchall()]
+            print(f"📊 Available tables: {tables}")
+            
     except Exception as e:
-        print(f"❌ Database error: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"❌ Startup verification error: {e}")
 
 @app.get("/")
 def root():
@@ -57,10 +71,12 @@ def root():
         "docs": "/docs",
         "health": "/health"
     }
+
 # CORS middleware - FIXED VERSION
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "https://taxbox-ai-enhanced-backend-1-production-2bcd.up.railway.app",
         "https://taxbox-ai-enhanced-frontend-1-production.up.railway.app",
         "http://localhost:3000",
         "http://127.0.0.1:3000"
@@ -172,6 +188,9 @@ async def process_w2_extraction(document_id: int, file_path: str, db: Session):
 # Routes
 @app.post("/register", response_model=UserResponse)
 def register(user: UserCreate, db: Session = Depends(get_db)):
+    # Add debug logging
+    print(f"Registration attempt for: {user.email}")
+    
     db_user = db.query(User).filter(User.email == user.email).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -185,6 +204,8 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
+    
+    print(f"✅ User registered successfully: {user.email}")
     return db_user
 
 @app.post("/token")
