@@ -33,14 +33,15 @@ async def startup_event():
     try:
         # Import all models first
         from models import User, Document, TaxReturn, Payment, W2Form
+        from sqlalchemy import text  # Add this import
         
         # Create tables
         Base.metadata.create_all(bind=engine)
         print("✅ Database tables created on startup")
         
-        # Test connection
+        # Test connection with proper SQLAlchemy syntax
         with SessionLocal() as db:
-            db.execute("SELECT 1")
+            db.execute(text("SELECT 1"))  # Fixed: Use text() wrapper
         print("✅ Database connection verified")
         
     except Exception as e:
