@@ -28,15 +28,18 @@ print("Tables created (if not exist)")
 
 app = FastAPI(title="TaxBox.AI API", version="2.0.0")
 
-# CORS middleware
+# Replace the CORS middleware section with this:
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure for production
+    allow_origins=[
+        "https://taxbox-ai-enhanced-frontend-1-production.up.railway.app",
+        "http://localhost:3000",  # For local development
+        "http://127.0.0.1:3000",  # Alternative localhost
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 # Create upload directory
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
